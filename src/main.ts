@@ -7,6 +7,7 @@ import router from './router'
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getDatabase, ref } from "firebase/database";
+import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: "AIzaSyA82aDtMI0FTZBlhlko4X0gOTF-49Cxa6I",
@@ -23,6 +24,7 @@ export const appFb = initializeApp(firebaseConfig);
 export const auth = getAuth(appFb);
 export const db = getDatabase(appFb);
 export const dbRef = ref(db); 
+export const dbFirestore = getFirestore(appFb);
 
 const app = createApp(App)
 app.use(createPinia())

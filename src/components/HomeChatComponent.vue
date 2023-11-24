@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { getFirestore, doc, getDoc, collection, onSnapshot, addDoc, serverTimestamp, count } from 'firebase/firestore';
+import { onMounted, ref as vueRef } from 'vue'
+import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot, addDoc, serverTimestamp, count, updateDoc } from 'firebase/firestore';
 import Swal from 'sweetalert2';
+import { initFlowbite } from 'flowbite';
+import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage"; 
+import { getAuth } from '@firebase/auth';
 const Toast = Swal.mixin({
     toast: true,
     position: "bottom-start",
@@ -20,19 +23,150 @@ const uid = user.uid;
 const db = getFirestore();
 const usuarioDoc = doc(db, 'usuarios', uid);
 
-var mensaje = ref("");
-var usuarios = ref({});
-var correo = ref("");
-var nombre = ref("");
-var busqueda = ref("");
+var mensaje = vueRef("");
+var usuarios = vueRef({});
+var correo = vueRef("");
+var nombre = vueRef("");
+var base64 = vueRef("");
+base64.value = "";
+var busqueda = vueRef("");
 var listaUsuarios: any = [];
-var chateandoCon = ""; 
+var chateandoCon = "";
+const auth = getAuth();
+
+const input = document.getElementsByName('inputFile')[0]; 
+var base64Image = "";
+
+function cargarImagen(event: any) {
+    const archivo = event.target.files[0];
+    const reader = new FileReader();
+    reader.onload = (event: any) => {
+        base64Image = event.target.result; // Aquí tienes la imagen en formato base64
+        //console.log(base64Image);
+    };
+    reader.readAsDataURL(archivo); // Convierte la imagen a base64 cuando se carga el archivo
+};
+
+// initialize components based on data attribute selectors
+onMounted(() => {
+    initFlowbite();
+})
+
+function subirImagenFirebaseStorage() {
+    const user = auth.currentUser;   
+
+    if (user) {
+        const uid = user.uid;
+        const storage = getStorage(); 
+
+        //Borra la imagen anterior
+        const imagesRef = ref(storage, `imagenes/${uid}.jpg`);
+        deleteObject(imagesRef)
+            .then(() => {
+                console.log('Imagen anterior borrada correctamente');
+            })
+            .catch((error) => {
+                console.error('Error al borrar la imagen anterior:', error);
+            });
+
+        // Convertir la base64 a un blob
+        const byteCharacters = atob(base64Image.split(',')[1]);
+        const byteNumbers = new Array(byteCharacters.length);
+
+        for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: 'image/jpeg' });
+
+        //Subir el blob a Firestore Storage
+        return uploadBytes(imagesRef, blob)
+            .then(() => {
+                console.log('Imagen subida a Firestore Storage');
+                // Obtener la URL de descarga de la imagen
+                return getDownloadURL(imagesRef);
+            })
+            .then((downloadURL) => {
+                console.log('URL de descarga obtenida:', downloadURL);
+                return downloadURL; // Retornar la URL de descarga
+            })
+            .catch((error) => {
+                console.error('Error al subir la imagen a Firestore Storage:', error);
+                return Promise.reject(error);
+            });
+    } else {
+        return Promise.reject(new Error('Usuario no autenticado'));
+    }
+}
+
+function actualizarUsuario() {
+    // Obtener el usuario actualmente autenticado
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+
+    // Si el usuario está autenticado
+    if (user) {
+        const uid = user.uid;
+
+        const db = getFirestore();
+        const usuarioDoc = doc(db, 'usuarios', uid); // Referencia al documento del usuario en Firestore
+
+        // Si se seleccionó una imagen
+        subirImagenFirebaseStorage().then((downloadURL) => {
+            // Actualizar solo los campos necesarios (nombre de usuario y/o imagen)
+            const dataToUpdate = {
+                username: nombre.value,
+                base64Image: downloadURL
+            };
+            console.log(dataToUpdate);
+
+            // Actualizar el documento del usuario en Firestore con los nuevos datos
+            updateDoc(usuarioDoc, dataToUpdate)
+                .then(() => {
+                    console.log('Usuario actualizado correctamente');
+                    // Crear la alerta de Swal para mostrar el estado
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Usuario actualizado correctamente',
+                        text: 'Puede continuar chateando',
+                        confirmButtonText: 'Aceptar'
+                    })
+                        //redireccionar a la pagina de chat luego de confirmar la alerta
+                        .then((result) => {
+                            if (result.isConfirmed) {
+                                window.location.href = "/chat";
+                            }
+                        })
+                })
+                .catch((error) => {
+                    console.error('Error al actualizar el usuario:', error);
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Error al actualizar el usuario',
+                        text: 'Intente nuevamente',
+                        confirmButtonText: 'Aceptar'
+                    })
+                });
+        }).catch((error) => {
+            console.error('Error al subir la imagen a Firestore Storage:', error);
+            Swal.fire({
+                icon: 'error',
+                title: 'Error al subir la imagen a Firestore Storage',
+                text: 'Intente nuevamente',
+                confirmButtonText: 'Aceptar'
+            })
+        });
+    }
+}
 
 getDoc(usuarioDoc)
     .then((docSnapshot) => {
         if (docSnapshot.exists()) {
             // Si el documento existe, obtén el nombre de usuario
-            nombre.value = docSnapshot.data().username;
+            nombre.value = docSnapshot.data().username; 
+            // Obtener la imagen de perfil del usuario
+            base64.value = docSnapshot.data().base64Image;
+            //console.log("base64Image: " + base64.value);
             // Obtener el correo del usuario
             correo.value = user.email;
         } else {
@@ -111,7 +245,7 @@ function abrirChat(usuario: string) {
         mensajes.forEach((doc: any) => {
             if (doc.timestamp === null) {
                 doc.timestamp = Date.now().toLocaleString();
-            }else{
+            } else {
                 // Convertir el timestamp a una fecha legible
                 var fecha = new Date(doc.timestamp.seconds * 1000);
                 // Guardar la fecha en el mensaje
@@ -157,7 +291,7 @@ function abrirChat(usuario: string) {
 
 }
 
-function scrollHaciaUltimoMensaje() { 
+function scrollHaciaUltimoMensaje() {
     const containerElement = document.getElementsByName('chatContainer')[0];
     if (containerElement) {
         // Acceder al último mensaje después de limpiar el contenedor
@@ -185,7 +319,7 @@ function enviarMensaje(usuario1: any, usuario2: any, message: any) {
         });
         return;
     }
-    
+
     try {
         const conversacionID = generarConversacionID(usuario1, usuario2);
 
@@ -240,7 +374,8 @@ function generarConversacionID(usuario1: any, usuario2: any) {
                                     class="flex text-sm bg-gray-800 rounded-full focus:ring-4 focus:ring-gray-300 dark:focus:ring-gray-600"
                                     aria-expanded="false" data-dropdown-toggle="dropdown-user">
                                     <span class="sr-only">Open user menu</span>
-                                    <img class="w-8 h-8 rounded-full" src="@/assets/perfil.jpg" alt="user photo">
+                                    <img v-if="base64 === ''" class="w-8 h-8 rounded-full" src="@/assets/perfil.jpg" alt="default user photo">
+                                    <img v-if="base64 !== ''" class="w-8 h-8 rounded-full" :src="base64" alt="user photo">
                                 </button>
                             </div>
                             <div class="z-50 hidden my-4 text-base list-none bg-white divide-y divide-gray-100 rounded shadow dark:bg-gray-700 dark:divide-gray-600"
@@ -254,6 +389,11 @@ function generarConversacionID(usuario1: any, usuario2: any) {
                                     </p>
                                 </div>
                                 <ul class="py-1" role="none">
+                                    <li class="flex justify-center">
+                                        <button id="burronActualizar" data-modal-toggle="modal-actualizar" data-modal-target="modal-actualizar" 
+                                            class="block px-4 py-2 text-sm text-green-700 hover:bg-red-100 dark:text-red-300 dark:hover:bg-red-600 dark:hover:text-white"
+                                            role="menuitem">Configuración</button>
+                                    </li>
                                     <li class="flex justify-center">
                                         <button @click.prevent="logout"
                                             class="block px-4 py-2 text-sm text-red-700 hover:bg-red-100 dark:text-red-300 dark:hover:bg-red-600 dark:hover:text-white"
@@ -292,7 +432,7 @@ function generarConversacionID(usuario1: any, usuario2: any) {
                     <li v-for="(usuario, index) in usuarios" :key="index">
                         <a v-if="usuario !== nombre" :name="usuario" @click.prevent="abrirChat(usuario)" type="button"
                             class="cursor-pointer flex items-center p-2 text-gray-900 rounded-lg dark:text-white
-                                                                        hover:bg-gray-100 dark:hover:bg-gray-700 group">
+                                                                            hover:bg-gray-100 dark:hover:bg-gray-700 group">
                             <img class="w-8 h-8 rounded-full" src="@/assets/perfil.jpg" alt="user photo">
                             <span class="flex-1 ms-3 whitespace-nowrap">{{ usuario }}</span>
                         </a>
@@ -302,7 +442,8 @@ function generarConversacionID(usuario1: any, usuario2: any) {
         </aside>
 
         <div class="contenedor-padre p-4 sm:ml-64">
-            <div name="chatContainer" class="border border-gray-300 border-b-0 div-arriba p-4 mt-14 bg-green-200 rounded-t-lg overflow-scroll">
+            <div name="chatContainer"
+                class="border border-gray-300 border-b-0 div-arriba p-4 mt-14 bg-green-200 rounded-t-lg overflow-scroll">
                 <!--Aca se cargan los mensajes-->
             </div>
             <div class="div-abajo border border-gray-300 border-t-0 bg-green-200 overflow-hidden">
@@ -348,6 +489,54 @@ function generarConversacionID(usuario1: any, usuario2: any) {
             </div>
         </div>
     </div>
+    <div id="modal-actualizar" tabindex="-1" aria-hidden="true"
+        class="fixed top-0 left-0 right-0 z-50 hidden w-full p-4 overflow-x-hidden overflow-y-auto md:inset-0 h-[calc(100%-1rem)] max-h-full">
+        <div class="relative w-full max-w-2xl max-h-full">
+            <!-- Modal content -->
+            <div class="relative bg-white rounded-lg shadow dark:bg-gray-700">
+                <!-- Modal header -->
+                <div class="flex items-start justify-between p-5 border-b rounded-t dark:border-gray-600">
+                    <h3 class="text-xl font-semibold text-gray-900 lg:text-2xl dark:text-white">
+                        Actualizar perfil
+                    </h3>
+                    <button id="closeButton" data-modal-hide="modal-actualizar" type="button"
+                        class="text-gray-400 bg-transparent hover:bg-gray-200 hover:text-gray-900 rounded-lg text-sm p-1.5 ml-auto inline-flex items-center dark:hover:bg-gray-600 dark:hover:text-white">
+                        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                            <path fill-rule="evenodd"
+                                d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                                clip-rule="evenodd"></path>
+                        </svg>
+                    </button>
+                </div>
+                <!-- Modal body -->
+                <form @submit.prevent="actualizarUsuario" class="max-w-sm mx-auto">
+                    <div class="p-6 space-y-6">
+                        <div class="mb-5">
+                            <label for="nombre"
+                                class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Nombre</label>
+                            <input v-model="nombre" name="nombre" type="text" id="nombre"
+                                class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-green-500 focus:border-green-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-green-500 dark:focus:border-green-500"
+                                placeholder="Nombre" required>
+                        </div>
+                        <div class="mb-5">
+                            <label for="imagen"
+                                class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Imagen de perfil
+                                (Opcional)</label>
+                            <input name="inputFile" type="file" id="imagen"
+                                @change.prevent="event => cargarImagen(event)"
+                                class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-green-500 focus:border-green-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-green-500 dark:focus:border-green-500">
+                        </div>
+                    </div>
+                    <!-- Modal footer -->
+                    <div
+                        class="flex justify-center items-center p-6 space-x-2 border-t border-gray-200 rounded-b dark:border-gray-600">
+                        <button
+                            class="text-white bg-green-700 hover:bg-green-800 focus:ring-4 focus:outline-none focus:ring-green-300 font-medium rounded-lg text-sm w-full sm:w-auto px-5 py-2.5 text-center dark:bg-green-600 dark:hover:bg-green-700 dark:focus:ring-green-800">Actualizar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
 </template>
 
 <style>
@@ -388,7 +577,7 @@ function generarConversacionID(usuario1: any, usuario2: any) {
 }
 
 .div-arriba {
-    flex: 1; 
+    flex: 1;
 }
 
 .div-abajo {

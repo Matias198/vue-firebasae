@@ -1,17 +1,69 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import { initFlowbite } from 'flowbite'
-import { ref } from 'vue'
+import { ref as vueRef } from 'vue'
 import { createUserWithEmailAndPassword, getAuth } from '@firebase/auth';
-import Swal from 'sweetalert2'
-import { getDatabase, ref as fireRef, onValue } from 'firebase/database';
-import { doc, setDoc, getFirestore } from "firebase/firestore";
+import Swal from 'sweetalert2';
+import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { doc, getFirestore, setDoc } from '@firebase/firestore';
 
-const email = ref("");
-const password = ref("");
-const repassword = ref("");
-const nombre = ref("");
+const email = vueRef("");
+const password = vueRef("");
+const repassword = vueRef("");
+const nombre = vueRef("");
+const input = document.getElementsByName('inputFile')[0];
 const auth = getAuth();
+var base64Image = "";
+
+function cargarImagen(event:any) {
+  const archivo = event.target.files[0];
+  const reader = new FileReader();
+  reader.onload = (event:any) => {
+    base64Image = event.target.result; // Aquí tienes la imagen en formato base64
+    //console.log(base64Image);
+  };
+  reader.readAsDataURL(archivo); // Convierte la imagen a base64 cuando se carga el archivo
+};
+
+function subirImagenFirebaseStorage() {
+    const user = auth.currentUser;   
+
+    if (user) {
+        const uid = user.uid;
+        const storage = getStorage(); 
+        // Create a child reference
+        const imagesRef = ref(storage, `imagenes/${uid}.jpg`)
+
+        // Convertir la base64 a un blob
+        const byteCharacters = atob(base64Image.split(',')[1]);
+        const byteNumbers = new Array(byteCharacters.length);
+
+        for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: 'image/jpeg' });
+
+        //Subir el blob a Firestore Storage
+        return uploadBytes(imagesRef, blob)
+            .then(() => {
+                console.log('Imagen subida a Firestore Storage');
+                // Obtener la URL de descarga de la imagen
+                return getDownloadURL(imagesRef);
+            })
+            .then((downloadURL) => {
+                console.log('URL de descarga obtenida:', downloadURL);
+                return downloadURL; // Retornar la URL de descarga
+            })
+            .catch((error) => {
+                console.error('Error al subir la imagen a Firestore Storage:', error);
+                return Promise.reject(error);
+            });
+    } else {
+        return Promise.reject(new Error('Usuario no autenticado'));
+    }
+}
 
 function register() {
     console.log("Registrando usuario con correo: " + email.value + " y contraseña: " + password.value)
@@ -26,12 +78,14 @@ function register() {
 
                 // 3. Guardar información adicional (nombre de usuario) en Cloud Firestore
                 const db = getFirestore();
-                const usuarioDoc = doc(db, 'usuarios', uid); // 'usuarios' es el nombre de la colección
+                const usuarioDoc = doc(db, 'usuarios', uid); // 'usuarios' es el nombre de la colección 
 
                 // Suponiendo que 'username' es el nombre de usuario ingresado por el usuario
                 const username = nombre.value || '';
-
-                setDoc(usuarioDoc, { username }) // Guardar el nombre de usuario en Cloud Firestore
+                
+                subirImagenFirebaseStorage().then((downloadURL) => {
+                    const url = downloadURL;
+                    setDoc(usuarioDoc, { username, url }) // Guardar el nombre de usuario en Cloud Firestore
                     .then(() => { 
                         console.log('Usuario registrado con nombre de usuario en Cloud Firestore');
                         // Guardar en la memoria local el usuario
@@ -59,7 +113,7 @@ function register() {
                             confirmButtonText: 'Aceptar'
                         })
                     });
- 
+                });                    
             })
             .catch((error) => {
                 const errorCode = error.code;
@@ -111,7 +165,7 @@ onMounted(() => {
                     <!-- Modal header -->
                     <div class="flex items-start justify-between p-5 border-b rounded-t dark:border-gray-600">
                         <h3 class="text-xl font-semibold text-gray-900 lg:text-2xl dark:text-white">
-                            Registrar Usuario
+                            Registrar usuario
                         </h3>
                         <button id="closeButton" data-modal-hide="modal-register" type="button"
                             class="text-gray-400 bg-transparent hover:bg-gray-200 hover:text-gray-900 rounded-lg text-sm p-1.5 ml-auto inline-flex items-center dark:hover:bg-gray-600 dark:hover:text-white">
@@ -131,6 +185,12 @@ onMounted(() => {
                                 <input v-model="nombre" name="nombre" type="text" id="nombre"
                                     class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-green-500 focus:border-green-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-green-500 dark:focus:border-green-500"
                                     placeholder="Nombre" required>
+                            </div>
+                            <div class="mb-5">
+                                <label for="imagen"
+                                    class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Imagen de perfil (Opcional)</label>
+                                <input name="inputFile" type="file" id="imagen" @change.prevent="event => cargarImagen(event)" accept="image/*"
+                                    class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-green-500 focus:border-green-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-green-500 dark:focus:border-green-500">
                             </div>
                             <div class="mb-5">
                                 <label for="email"
