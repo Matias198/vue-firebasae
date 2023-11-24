@@ -3,7 +3,13 @@ import TheWelcome from '../components/TheWelcome.vue'
 import MainComponent from '@/components/MainComponent.vue'
 </script>
 
-<template class="flex justify-center align-middle">
-  <MainComponent />
-  <TheWelcome />
-</template>
+<template>
+  <div>
+    <div>
+      <MainComponent />
+    </div>
+    <div class="flex justify-center">
+      <TheWelcome />
+    </div>
+  </div>
+</template> 
