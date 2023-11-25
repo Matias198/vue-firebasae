@@ -6,31 +6,33 @@ import { createUserWithEmailAndPassword, getAuth } from '@firebase/auth';
 import Swal from 'sweetalert2';
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { doc, getFirestore, setDoc } from '@firebase/firestore';
+import { useLoading } from 'vue3-loading-overlay';
 
 const email = vueRef("");
 const password = vueRef("");
 const repassword = vueRef("");
 const nombre = vueRef("");
 const input = document.getElementsByName('inputFile')[0];
-const auth = getAuth();
+const auth = getAuth(); 
 var base64Image = "";
+let loader = useLoading();
 
-function cargarImagen(event:any) {
-  const archivo = event.target.files[0];
-  const reader = new FileReader();
-  reader.onload = (event:any) => {
-    base64Image = event.target.result; // Aquí tienes la imagen en formato base64
-    //console.log(base64Image);
-  };
-  reader.readAsDataURL(archivo); // Convierte la imagen a base64 cuando se carga el archivo
+function cargarImagen(event: any) {
+    const archivo = event.target.files[0];
+    const reader = new FileReader();
+    reader.onload = (event: any) => {
+        base64Image = event.target.result; // Aquí tienes la imagen en formato base64
+        //console.log(base64Image);
+    };
+    reader.readAsDataURL(archivo); // Convierte la imagen a base64 cuando se carga el archivo
 };
 
 function subirImagenFirebaseStorage() {
-    const user = auth.currentUser;   
+    const user = auth.currentUser;
 
     if (user) {
         const uid = user.uid;
-        const storage = getStorage(); 
+        const storage = getStorage();
         // Create a child reference
         const imagesRef = ref(storage, `imagenes/${uid}.jpg`)
 
@@ -66,6 +68,16 @@ function subirImagenFirebaseStorage() {
 }
 
 function register() {
+    loader.show({
+        canCancel: false,
+        color: '#ffffff',
+        loader: 'spinner',
+        width: 64,
+        height: 64,
+        backgroundColor: '#000000',
+        opacity: 0.5,
+        zIndex: 999,
+    });
     console.log("Registrando usuario con correo: " + email.value + " y contraseña: " + password.value)
     if (password.value === repassword.value) {
         createUserWithEmailAndPassword(auth, email.value, password.value)
@@ -82,38 +94,38 @@ function register() {
 
                 // Suponiendo que 'username' es el nombre de usuario ingresado por el usuario
                 const username = nombre.value || '';
-                
+
                 subirImagenFirebaseStorage().then((downloadURL) => {
                     const url = downloadURL;
                     setDoc(usuarioDoc, { username, url }) // Guardar el nombre de usuario en Cloud Firestore
-                    .then(() => { 
-                        console.log('Usuario registrado con nombre de usuario en Cloud Firestore');
-                        // Guardar en la memoria local el usuario
-                        localStorage.setItem('user', JSON.stringify(user));
-                        // Crear la alerta de Swal para mostrar el estado
-                        Swal.fire({
-                            icon: 'success',
-                            title: 'Usuario creado correctamente',
-                            text: 'Bienvenido a VueChat',
-                            confirmButtonText: 'Aceptar'
-                        })
-                            //redireccionar a la pagina de chat luego de confirmar la alerta
-                            .then((result) => {
-                                if (result.isConfirmed) {
-                                    window.location.href = "/chat";
-                                }
+                        .then(() => {
+                            console.log('Usuario registrado con nombre de usuario en Cloud Firestore');
+                            // Guardar en la memoria local el usuario
+                            localStorage.setItem('user', JSON.stringify(user));
+                            // Crear la alerta de Swal para mostrar el estado
+                            Swal.fire({
+                                icon: 'success',
+                                title: 'Usuario creado correctamente',
+                                text: 'Bienvenido a VueChat',
+                                confirmButtonText: 'Aceptar'
                             })
-                    })
-                    .catch((error) => {
-                        console.error('Error al guardar el nombre de usuario:', error); 
-                        Swal.fire({
-                            icon: 'error',
-                            title: 'Error al crear usuario',
-                            text: 'No se pudo guardar el nombre de usuario',
-                            confirmButtonText: 'Aceptar'
+                                //redireccionar a la pagina de chat luego de confirmar la alerta
+                                .then((result) => {
+                                    if (result.isConfirmed) {
+                                        window.location.href = "/chat";
+                                    }
+                                })
                         })
-                    });
-                });                    
+                        .catch((error) => {
+                            console.error('Error al guardar el nombre de usuario:', error);
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'Error al crear usuario',
+                                text: 'No se pudo guardar el nombre de usuario',
+                                confirmButtonText: 'Aceptar'
+                            })
+                        });
+                });
             })
             .catch((error) => {
                 const errorCode = error.code;
@@ -133,8 +145,8 @@ function register() {
             text: 'Las contraseñas no coinciden',
             confirmButtonText: 'Aceptar'
         })
-
     }
+    loader.hide();
 }
 
 // initialize components based on data attribute selectors
@@ -145,6 +157,7 @@ onMounted(() => {
 </script>
 <template>
     <div>
+        <loading></loading>
         <div class="flex justify-center p-4">
             <button id="buttonRegister" data-modal-toggle="modal-register" data-modal-target="modal-register" type="button"
                 class="text-white mt-2 ml-3 bg-green-700 hover:bg-green-800 focus:ring-4 focus:outline-none focus:ring-green-300 font-medium rounded-lg text-sm px-5 py-2.5 text-center inline-flex items-center me-2 dark:bg-green-600 dark:hover:bg-green-700 dark:focus:ring-green-800">
@@ -188,8 +201,10 @@ onMounted(() => {
                             </div>
                             <div class="mb-5">
                                 <label for="imagen"
-                                    class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Imagen de perfil (Opcional)</label>
-                                <input name="inputFile" type="file" id="imagen" @change.prevent="event => cargarImagen(event)" accept="image/*"
+                                    class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Imagen de perfil
+                                    (Opcional)</label>
+                                <input name="inputFile" type="file" id="imagen"
+                                    @change.prevent="event => cargarImagen(event)" accept="image/*"
                                     class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-green-500 focus:border-green-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-green-500 dark:focus:border-green-500">
                             </div>
                             <div class="mb-5">

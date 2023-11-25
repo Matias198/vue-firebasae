@@ -3,8 +3,10 @@ import { onMounted, ref as vueRef } from 'vue'
 import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot, addDoc, serverTimestamp, count, updateDoc } from 'firebase/firestore';
 import Swal from 'sweetalert2';
 import { initFlowbite } from 'flowbite';
-import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage"; 
+import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import { getAuth } from '@firebase/auth';
+import { useLoading } from 'vue3-loading-overlay';
+
 const Toast = Swal.mixin({
     toast: true,
     position: "bottom-start",
@@ -33,8 +35,9 @@ var busqueda = vueRef("");
 var listaUsuarios: any = [];
 var chateandoCon = "";
 const auth = getAuth();
+let loader = useLoading();
 
-const input = document.getElementsByName('inputFile')[0]; 
+const input = document.getElementsByName('inputFile')[0];
 var base64Image = "";
 
 function cargarImagen(event: any) {
@@ -53,11 +56,11 @@ onMounted(() => {
 })
 
 function subirImagenFirebaseStorage() {
-    const user = auth.currentUser;   
+    const user = auth.currentUser;
 
     if (user) {
         const uid = user.uid;
-        const storage = getStorage(); 
+        const storage = getStorage();
 
         //Borra la imagen anterior
         const imagesRef = ref(storage, `imagenes/${uid}.jpg`);
@@ -101,6 +104,16 @@ function subirImagenFirebaseStorage() {
 }
 
 function actualizarUsuario() {
+    loader.show({
+        canCancel: false,
+        color: '#ffffff',
+        loader: 'spinner',
+        width: 64,
+        height: 64,
+        backgroundColor: '#000000',
+        opacity: 0.5,
+        zIndex: 999,
+    });
     // Obtener el usuario actualmente autenticado
     const user = JSON.parse(localStorage.getItem('user') || '{}');
 
@@ -157,13 +170,24 @@ function actualizarUsuario() {
             })
         });
     }
+    loader.hide();
 }
 
 getDoc(usuarioDoc)
     .then((docSnapshot) => {
+        loader.show({
+            canCancel: false,
+            color: '#ffffff',
+            loader: 'spinner',
+            width: 64,
+            height: 64,
+            backgroundColor: '#000000',
+            opacity: 0.5,
+            zIndex: 999,
+        });
         if (docSnapshot.exists()) {
             // Si el documento existe, obtén el nombre de usuario
-            nombre.value = docSnapshot.data().username; 
+            nombre.value = docSnapshot.data().username;
             // Obtener la imagen de perfil del usuario
             base64.value = docSnapshot.data().base64Image;
             //console.log("base64Image: " + base64.value);
@@ -171,22 +195,35 @@ getDoc(usuarioDoc)
             correo.value = user.email;
         } else {
             console.log('No se encontró el usuario en Firestore');
-        }
+        }        
+        loader.hide();
     })
     .catch((error) => {
         console.error('Error al obtener el nombre de usuario:', error);
+        loader.hide();
     });
 
 // Obtener todos los usuarios
 const usuariosCollection = collection(db, 'usuarios');
 
 onSnapshot(usuariosCollection, (snapshot) => {
+    loader.show({
+        canCancel: false,
+        color: '#ffffff',
+        loader: 'spinner',
+        width: 64,
+        height: 64,
+        backgroundColor: '#000000',
+        opacity: 0.5,
+        zIndex: 999,
+    });
     usuarios.value = snapshot.docs.map(doc => doc.data().username);
     snapshot.docs.map(doc => doc.data().username).forEach((usuario: any) => {
         if (usuario !== nombre.value) {
             listaUsuarios.push(usuario.toString().toUpperCase());
         }
     });
+    loader.hide();
     console.log(listaUsuarios);
 });
 
@@ -196,6 +233,16 @@ function logout() {
 }
 
 function buscar() {
+    loader.show({
+        canCancel: false,
+        color: '#ffffff',
+        loader: 'spinner',
+        width: 64,
+        height: 64,
+        backgroundColor: '#000000',
+        opacity: 0.5,
+        zIndex: 999,
+    });
     //console.log(busqueda.value);
     // eliminar espacios antes y despues
     busqueda.value = busqueda.value.trim();
@@ -210,10 +257,20 @@ function buscar() {
     } else {
         console.log("Usuario no encontrado");
     }
+    loader.hide();
 }
 
 function abrirChat(usuario: string) {
-
+    loader.show({
+        canCancel: false,
+        color: '#ffffff',
+        loader: 'spinner',
+        width: 64,
+        height: 64,
+        backgroundColor: '#000000',
+        opacity: 0.5,
+        zIndex: 999,
+    });
     // guardar el nombre del usuario con el que se está chateando
     chateandoCon = usuario;
 
@@ -288,7 +345,7 @@ function abrirChat(usuario: string) {
         });
         scrollHaciaUltimoMensaje();
     });
-
+    loader.hide();
 }
 
 function scrollHaciaUltimoMensaje() {
@@ -303,6 +360,16 @@ function scrollHaciaUltimoMensaje() {
 }
 
 function enviarMensaje(usuario1: any, usuario2: any, message: any) {
+    loader.show({
+        canCancel: false,
+        color: '#ffffff',
+        loader: 'spinner',
+        width: 64,
+        height: 64,
+        backgroundColor: '#000000',
+        opacity: 0.5,
+        zIndex: 999,
+    });
     if (chateandoCon === '') {
         // Swal toast de "Chateando con"
         Toast.fire({
@@ -337,14 +404,15 @@ function enviarMensaje(usuario1: any, usuario2: any, message: any) {
     } catch (error) {
         console.error('Error al enviar el mensaje:', error);
     }
+    loader.hide();
 }
 
 function generarConversacionID(usuario1: any, usuario2: any) {
     return usuario1 < usuario2 ? `${usuario1}_${usuario2}` : `${usuario2}_${usuario1}`;
 }
-
 </script>
 <template >
+    <loading></loading>
     <div class="bg-white">
         <nav class="fixed top-0 z-50 w-full bg-white border-b border-gray-200 dark:bg-gray-800 dark:border-gray-700">
             <div class="px-3 py-3 lg:px-5 lg:pl-3">
@@ -374,7 +442,8 @@ function generarConversacionID(usuario1: any, usuario2: any) {
                                     class="flex text-sm bg-gray-800 rounded-full focus:ring-4 focus:ring-gray-300 dark:focus:ring-gray-600"
                                     aria-expanded="false" data-dropdown-toggle="dropdown-user">
                                     <span class="sr-only">Open user menu</span>
-                                    <img v-if="base64 === ''" class="w-8 h-8 rounded-full" src="@/assets/perfil.jpg" alt="default user photo">
+                                    <img v-if="base64 === ''" class="w-8 h-8 rounded-full" src="@/assets/perfil.jpg"
+                                        alt="default user photo">
                                     <img v-if="base64 !== ''" class="w-8 h-8 rounded-full" :src="base64" alt="user photo">
                                 </button>
                             </div>
@@ -390,7 +459,8 @@ function generarConversacionID(usuario1: any, usuario2: any) {
                                 </div>
                                 <ul class="py-1" role="none">
                                     <li class="flex justify-center">
-                                        <button id="burronActualizar" data-modal-toggle="modal-actualizar" data-modal-target="modal-actualizar" 
+                                        <button id="burronActualizar" data-modal-toggle="modal-actualizar"
+                                            data-modal-target="modal-actualizar"
                                             class="block px-4 py-2 text-sm text-green-700 hover:bg-red-100 dark:text-red-300 dark:hover:bg-red-600 dark:hover:text-white"
                                             role="menuitem">Configuración</button>
                                     </li>
@@ -432,7 +502,7 @@ function generarConversacionID(usuario1: any, usuario2: any) {
                     <li v-for="(usuario, index) in usuarios" :key="index">
                         <a v-if="usuario !== nombre" :name="usuario" @click.prevent="abrirChat(usuario)" type="button"
                             class="cursor-pointer flex items-center p-2 text-gray-900 rounded-lg dark:text-white
-                                                                            hover:bg-gray-100 dark:hover:bg-gray-700 group">
+                                                                                hover:bg-gray-100 dark:hover:bg-gray-700 group">
                             <img class="w-8 h-8 rounded-full" src="@/assets/perfil.jpg" alt="user photo">
                             <span class="flex-1 ms-3 whitespace-nowrap">{{ usuario }}</span>
                         </a>
@@ -519,11 +589,10 @@ function generarConversacionID(usuario1: any, usuario2: any) {
                                 placeholder="Nombre" required>
                         </div>
                         <div class="mb-5">
-                            <label for="imagen"
-                                class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Imagen de perfil
+                            <label for="imagen" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Imagen
+                                de perfil
                                 (Opcional)</label>
-                            <input name="inputFile" type="file" id="imagen"
-                                @change.prevent="event => cargarImagen(event)"
+                            <input name="inputFile" type="file" id="imagen" @change.prevent="event => cargarImagen(event)"
                                 class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-green-500 focus:border-green-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-green-500 dark:focus:border-green-500">
                         </div>
                     </div>

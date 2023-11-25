@@ -12,4 +12,4 @@ import MainComponent from '@/components/MainComponent.vue'
       <TheWelcome />
     </div>
   </div>
-</template> 
+</template>
