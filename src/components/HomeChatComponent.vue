@@ -6,6 +6,7 @@ import { initFlowbite } from 'flowbite';
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { getAuth } from '@firebase/auth';
 import { useLoading } from 'vue3-loading-overlay';
+import EmojiPicker from 'vue3-emoji-picker'
 
 const Toast = Swal.mixin({
     toast: true,
@@ -333,7 +334,15 @@ function scrollHaciaUltimoMensaje() {
     }
 }
 
-function enviarMensaje(usuario1: any, usuario2: any, message: any) {
+function onSelectEmoji(emoji: any) {
+    // Obtener el text area
+    const chat = document.getElementById('chat') as HTMLTextAreaElement;
+    // Agregar el emoji al text area
+    chat.value += emoji.i;
+}
+
+function enviarMensaje(usuario1: any, usuario2: any) {
+    
     if (chateandoCon === '') {
         // Swal toast de "Chateando con"
         Toast.fire({
@@ -342,8 +351,11 @@ function enviarMensaje(usuario1: any, usuario2: any, message: any) {
         });
         return;
     }
+    // Messageaux es el contenido del text area
+    let chataux = document.getElementById('chat') as HTMLTextAreaElement;
+    mensaje.value = chataux.value;
     // Si el mensaje no contiene caracteres o solo espacios
-    if (!message.replace(/\s/g, '').length) {
+    if (!mensaje.value.replace(/\s/g, '').length) {
         Toast.fire({
             icon: 'error',
             title: 'No puedes enviar un mensaje vacio',
@@ -358,7 +370,7 @@ function enviarMensaje(usuario1: any, usuario2: any, message: any) {
         const mensajesRef = collection(db, 'mensajes', conversacionID, 'mensajes');
 
         addDoc(mensajesRef, {
-            contenido: message,
+            contenido: mensaje.value,
             remitente: usuario1,
             receptor: usuario2,
             timestamp: serverTimestamp()
@@ -415,7 +427,6 @@ function generarConversacionID(usuario1: any, usuario2: any) {
                                             fill="currentFill" />
                                     </svg>
                                     <span class="sr-only">Loading...</span>
-
                                 </span>
                                 <button type="button"
                                     class="flex text-sm bg-gray-800 rounded-full focus:ring-4 focus:ring-gray-300 dark:focus:ring-gray-600"
@@ -523,6 +534,7 @@ function generarConversacionID(usuario1: any, usuario2: any) {
                         <h1 class="text-center text-2xl font-bold text-green-600">Bienvenido a VueChat</h1>
                         <p class="text-center text-lg text-green-600">Seleccione un usuario para comenzar a
                             chatear</p>
+
                         <span v-if="JSON.stringify(usuarios) == '{}'" class="v-center">
                             <p class="px-1 text-center text-sm text-green-600">Cargando contenido</p>
                             <svg aria-hidden="true" class="px-1 w-8 h-8 text-gray-200 animate-spin fill-green-600"
@@ -544,20 +556,7 @@ function generarConversacionID(usuario1: any, usuario2: any) {
                 <form>
                     <label for="chat" class="sr-only ">Su mensaje</label>
                     <div class="flex items-center px-3 py-2 rounded-t-lg bg-white dark:bg-gray-700">
-                        <button type="button"
-                            class="inline-flex justify-center p-2 text-green-500 rounded-lg cursor-pointer hover:text-gray-900 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-white dark:hover:bg-gray-600">
-                            <svg class="w-5 h-5" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none"
-                                viewBox="0 0 20 18">
-                                <path fill="currentColor"
-                                    d="M13 5.5a.5.5 0 1 1-1 0 .5.5 0 0 1 1 0ZM7.565 7.423 4.5 14h11.518l-2.516-3.71L11 13 7.565 7.423Z" />
-                                <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M18 1H2a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1Z" />
-                                <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M13 5.5a.5.5 0 1 1-1 0 .5.5 0 0 1 1 0ZM7.565 7.423 4.5 14h11.518l-2.516-3.71L11 13 7.565 7.423Z" />
-                            </svg>
-                            <span class="sr-only">Upload image</span>
-                        </button>
-                        <button type="button"
+                        <button type="button" data-modal-toggle="modal-emojis" data-modal-target="modal-emojis"
                             class="p-2 text-green-500 rounded-lg cursor-pointer hover:text-gray-900 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-white dark:hover:bg-gray-600">
                             <svg class="w-5 h-5" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none"
                                 viewBox="0 0 20 20">
@@ -569,7 +568,7 @@ function generarConversacionID(usuario1: any, usuario2: any) {
                         <textarea name="sendChat" id="chat" rows="1" v-model="mensaje"
                             class="block mx-4 p-2.5 w-full text-sm text-gray-900 bg-white rounded-lg border border-gray-300 focus:ring-green-500 focus:border-green-500 dark:bg-gray-800 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-green-500 dark:focus:border-green-500"
                             placeholder="Escriba un mensaje..."></textarea>
-                        <a type="button" @click.prevent="enviarMensaje(nombre, chateandoCon, mensaje)"
+                        <a type="button" @click.prevent="enviarMensaje(nombre, chateandoCon)"
                             class="inline-flex justify-center p-2 text-green-600 rounded-full cursor-pointer hover:bg-green-100 dark:text-green-500 dark:hover:bg-gray-600">
                             <svg class="w-5 h-5 rotate-90 rtl:-rotate-90" aria-hidden="true"
                                 xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 18 20">
@@ -606,12 +605,12 @@ function generarConversacionID(usuario1: any, usuario2: any) {
                 <form @submit.prevent="actualizarUsuario" class="max-w-sm mx-auto">
                     <div class="p-6 space-y-6">
                         <!--<div class="mb-5">
-                                                                                                            <label for="nombre"
-                                                                                                                class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Nombre</label>
-                                                                                                            <input v-model="nombre" name="nombre" type="text" id="nombre"
-                                                                                                                class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-green-500 focus:border-green-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-green-500 dark:focus:border-green-500"
-                                                                                                                placeholder="Nombre" required>
-                                                                                                        </div>-->
+                                <label for="nombre"
+                                    class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Nombre</label>
+                                <input v-model="nombre" name="nombre" type="text" id="nombre"
+                                    class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-green-500 focus:border-green-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-green-500 dark:focus:border-green-500"
+                                    placeholder="Nombre" required>
+                            </div>-->
                         <div class="mb-5">
                             <label for="imagen" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Imagen
                                 de perfil</label>
@@ -626,6 +625,33 @@ function generarConversacionID(usuario1: any, usuario2: any) {
                             class="text-white bg-green-700 hover:bg-green-800 focus:ring-4 focus:outline-none focus:ring-green-300 font-medium rounded-lg text-sm w-full sm:w-auto px-5 py-2.5 text-center dark:bg-green-600 dark:hover:bg-green-700 dark:focus:ring-green-800">Actualizar</button>
                     </div>
                 </form>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-emojis" tabindex="-1" aria-hidden="true"
+        class="fixed  top-0 left-0 right-0 z-50 hidden w-full p-4 overflow-x-hidden overflow-y-auto md:inset-0 h-[calc(100%-1rem)] max-h-full">
+        <div class="border relative w-full max-w-2xl max-h-full">
+            <!-- Modal content -->
+            <div class="relative bg-white text-black">
+                <!-- Modal body -->
+                <div class="p-6 ">
+                    <div class="flex justify-between v-center">
+                        <h3 class="text-xl font-semibold text-gray-900 lg:text-2xl dark:text-white">
+                            Emojis
+                        </h3>
+                        <button id="closeButton" data-modal-hide="modal-emojis" type="button"
+                            class="text-gray-400 bg-transparent hover:bg-gray-200 hover:text-gray-900 rounded-lg text-sm p-1.5 ml-auto inline-flex items-center dark:hover:bg-gray-600 dark:hover:text-white">
+                            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                                <path fill-rule="evenodd"
+                                    d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                                    clip-rule="evenodd"></path>
+                            </svg>
+                        </button>
+                    </div>
+                    <EmojiPicker :native="true" :hide-search="true" :disable-skin-tones="true" :display-recent="false"
+                        @select="onSelectEmoji" />
+                </div>
             </div>
         </div>
     </div>
