@@ -4,12 +4,27 @@ import { initFlowbite } from 'flowbite'
 import { ref } from 'vue'
 import { getAuth, signInWithEmailAndPassword } from '@firebase/auth';
 import Swal from 'sweetalert2'
+import { useLoading } from 'vue3-loading-overlay';
  
 const email = ref("");
 const password = ref("");
 const auth = getAuth();
+let loader = useLoading();
 
 function login() {
+    loader.show({
+        canCancel: false,
+        color: '#ffffff',
+        loader: 'spinner',
+        width: 64,
+        height: 64,
+        backgroundColor: '#000000',
+        opacity: 0.5,
+        zIndex: 999,
+    });
+    // obtener por nombre y deshabilitar el boton de login
+    const buttonLogin = document.getElementsByName("buttonLogin")[0];
+    buttonLogin.setAttribute("disabled", "disabled");
     //console.log("Iniciando sesión con correo: " + email.value + " y contraseña: " + password.value);
     signInWithEmailAndPassword(auth, email.value, password.value)
     .then((userCredential) => {
@@ -30,6 +45,9 @@ function login() {
             text: errorMessage,
             confirmButtonText: 'Aceptar'
         })
+        // habilitar el boton de login
+        buttonLogin.removeAttribute("disabled");
+        loader.hide();
     });
 }
 
@@ -82,7 +100,7 @@ onMounted(() => {
                     </div>
                     <!-- Modal footer -->
                     <div class="flex justify-center items-center p-6 space-x-2 border-t border-gray-200 rounded-b dark:border-gray-600">
-                        <button class="text-white bg-green-700 hover:bg-green-800 focus:ring-4 focus:outline-none focus:ring-green-300 font-medium rounded-lg text-sm w-full sm:w-auto px-5 py-2.5 text-center dark:bg-green-600 dark:hover:bg-green-700 dark:focus:ring-green-800">Ingresar</button>
+                        <button name="buttonLogin" class="text-white bg-green-700 hover:bg-green-800 focus:ring-4 focus:outline-none focus:ring-green-300 font-medium rounded-lg text-sm w-full sm:w-auto px-5 py-2.5 text-center dark:bg-green-600 dark:hover:bg-green-700 dark:focus:ring-green-800">Ingresar</button>
                     </div>
                 </form>
             </div>

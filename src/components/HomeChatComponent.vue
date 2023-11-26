@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { onMounted, ref as vueRef } from 'vue'
-import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot, addDoc, serverTimestamp, count, updateDoc } from 'firebase/firestore';
+import { getFirestore, doc, getDoc, collection, onSnapshot, addDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import Swal from 'sweetalert2';
 import { initFlowbite } from 'flowbite';
-import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
+import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { getAuth } from '@firebase/auth';
 import { useLoading } from 'vue3-loading-overlay';
 
@@ -27,6 +27,7 @@ const usuarioDoc = doc(db, 'usuarios', uid);
 
 var mensaje = vueRef("");
 var usuarios = vueRef({});
+var usuarioAux: any;
 var correo = vueRef("");
 var nombre = vueRef("");
 var base64 = vueRef("");
@@ -36,6 +37,7 @@ var listaUsuarios: any = [];
 var chateandoCon = "";
 const auth = getAuth();
 let loader = useLoading();
+loader.hide();
 
 const input = document.getElementsByName('inputFile')[0];
 var base64Image = "";
@@ -64,40 +66,47 @@ function subirImagenFirebaseStorage() {
 
         //Borra la imagen anterior
         const imagesRef = ref(storage, `imagenes/${uid}.jpg`);
-        deleteObject(imagesRef)
-            .then(() => {
-                console.log('Imagen anterior borrada correctamente');
+
+        try {
+            // Convertir la base64 a un blob
+            const byteCharacters = atob(base64Image.split(',')[1]);
+            const byteNumbers = new Array(byteCharacters.length);
+
+            for (let i = 0; i < byteCharacters.length; i++) {
+                byteNumbers[i] = byteCharacters.charCodeAt(i);
+            }
+
+            const byteArray = new Uint8Array(byteNumbers);
+            const blob = new Blob([byteArray], { type: 'image/jpeg' });
+
+            //Subir el blob a Firestore Storage
+            return uploadBytes(imagesRef, blob)
+                .then(() => {
+                    console.log('Imagen subida a Firestore Storage');
+                    // Obtener la URL de descarga de la imagen
+                    return getDownloadURL(imagesRef);
+                })
+                .then((downloadURL) => {
+                    console.log('URL de descarga obtenida:', downloadURL);
+                    return downloadURL; // Retornar la URL de descarga
+                })
+                .catch((error) => {
+                    console.error('Error al subir la imagen a Firestore Storage:', error);
+                    return Promise.reject(error);
+                });
+        } catch (error) {
+            console.error('Error al subir la imagen a Firestore Storage:', error);
+            Swal.fire({
+                icon: 'error',
+                title: 'Error al subir la imagen a Firestore Storage',
+                text: 'Intente nuevamente',
+                confirmButtonText: 'Aceptar'
             })
-            .catch((error) => {
-                console.error('Error al borrar la imagen anterior:', error);
-            });
-
-        // Convertir la base64 a un blob
-        const byteCharacters = atob(base64Image.split(',')[1]);
-        const byteNumbers = new Array(byteCharacters.length);
-
-        for (let i = 0; i < byteCharacters.length; i++) {
-            byteNumbers[i] = byteCharacters.charCodeAt(i);
+            setTimeout(() => {
+                loader.hide();
+            }, 1000);
+            return Promise.reject(error);
         }
-
-        const byteArray = new Uint8Array(byteNumbers);
-        const blob = new Blob([byteArray], { type: 'image/jpeg' });
-
-        //Subir el blob a Firestore Storage
-        return uploadBytes(imagesRef, blob)
-            .then(() => {
-                console.log('Imagen subida a Firestore Storage');
-                // Obtener la URL de descarga de la imagen
-                return getDownloadURL(imagesRef);
-            })
-            .then((downloadURL) => {
-                console.log('URL de descarga obtenida:', downloadURL);
-                return downloadURL; // Retornar la URL de descarga
-            })
-            .catch((error) => {
-                console.error('Error al subir la imagen a Firestore Storage:', error);
-                return Promise.reject(error);
-            });
     } else {
         return Promise.reject(new Error('Usuario no autenticado'));
     }
@@ -128,7 +137,7 @@ function actualizarUsuario() {
         subirImagenFirebaseStorage().then((downloadURL) => {
             // Actualizar solo los campos necesarios (nombre de usuario y/o imagen)
             const dataToUpdate = {
-                username: nombre.value,
+                //username: nombre.value,
                 base64Image: downloadURL
             };
             console.log(dataToUpdate);
@@ -138,6 +147,9 @@ function actualizarUsuario() {
                 .then(() => {
                     console.log('Usuario actualizado correctamente');
                     // Crear la alerta de Swal para mostrar el estado
+                    setTimeout(() => {
+                        loader.hide();
+                    }, 1000);
                     Swal.fire({
                         icon: 'success',
                         title: 'Usuario actualizado correctamente',
@@ -152,6 +164,9 @@ function actualizarUsuario() {
                         })
                 })
                 .catch((error) => {
+                    setTimeout(() => {
+                        loader.hide();
+                    }, 1000);
                     console.error('Error al actualizar el usuario:', error);
                     Swal.fire({
                         icon: 'error',
@@ -161,6 +176,9 @@ function actualizarUsuario() {
                     })
                 });
         }).catch((error) => {
+            setTimeout(() => {
+                loader.hide();
+            }, 1000);
             console.error('Error al subir la imagen a Firestore Storage:', error);
             Swal.fire({
                 icon: 'error',
@@ -170,21 +188,10 @@ function actualizarUsuario() {
             })
         });
     }
-    loader.hide();
 }
 
 getDoc(usuarioDoc)
     .then((docSnapshot) => {
-        loader.show({
-            canCancel: false,
-            color: '#ffffff',
-            loader: 'spinner',
-            width: 64,
-            height: 64,
-            backgroundColor: '#000000',
-            opacity: 0.5,
-            zIndex: 999,
-        });
         if (docSnapshot.exists()) {
             // Si el documento existe, obtén el nombre de usuario
             nombre.value = docSnapshot.data().username;
@@ -195,37 +202,27 @@ getDoc(usuarioDoc)
             correo.value = user.email;
         } else {
             console.log('No se encontró el usuario en Firestore');
-        }        
-        loader.hide();
+        }
     })
     .catch((error) => {
         console.error('Error al obtener el nombre de usuario:', error);
-        loader.hide();
     });
 
 // Obtener todos los usuarios
 const usuariosCollection = collection(db, 'usuarios');
 
 onSnapshot(usuariosCollection, (snapshot) => {
-    loader.show({
-        canCancel: false,
-        color: '#ffffff',
-        loader: 'spinner',
-        width: 64,
-        height: 64,
-        backgroundColor: '#000000',
-        opacity: 0.5,
-        zIndex: 999,
-    });
-    usuarios.value = snapshot.docs.map(doc => doc.data().username);
-    snapshot.docs.map(doc => doc.data().username).forEach((usuario: any) => {
+    usuarios.value = snapshot.docs.map(doc => doc.data());
+    snapshot.docs.map(doc => doc.data()).forEach((usuario: any) => {
         if (usuario !== nombre.value) {
-            listaUsuarios.push(usuario.toString().toUpperCase());
+            listaUsuarios.push(usuario);
         }
     });
-    loader.hide();
-    console.log(listaUsuarios);
+    usuarioAux = usuarios.value;
 });
+
+
+
 
 function logout() {
     localStorage.removeItem('user');
@@ -233,56 +230,34 @@ function logout() {
 }
 
 function buscar() {
-    loader.show({
-        canCancel: false,
-        color: '#ffffff',
-        loader: 'spinner',
-        width: 64,
-        height: 64,
-        backgroundColor: '#000000',
-        opacity: 0.5,
-        zIndex: 999,
+    let listaAuxiliar = listaUsuarios;
+    let arrayAuxiliar: any = [];
+    let usuariosFiltrados: any = [];
+    listaAuxiliar.forEach((usuario: any) => {
+        arrayAuxiliar.push(usuario);
     });
-    //console.log(busqueda.value);
-    // eliminar espacios antes y despues
-    busqueda.value = busqueda.value.trim();
-
-    // Buscar en la lista de usuarios haciendo coincidir mayúsculas y minúsculas
-    if (listaUsuarios.includes(busqueda.value.toUpperCase())) {
-        console.log("Usuario encontrado");
-        // Poner en camel case el valor de busqueda
-        busqueda.value = busqueda.value.charAt(0).toUpperCase() + busqueda.value.slice(1);
-        // Clickear en el usuario encontrado para abrir el chat
-        document.getElementsByName(busqueda.value)[0].click();
-    } else {
-        console.log("Usuario no encontrado");
+    usuariosFiltrados = arrayAuxiliar.filter((user: any) =>
+        user.username.toString().toLowerCase().includes(busqueda.value.toString().toLowerCase())
+    );
+    usuarios.value = usuariosFiltrados;
+    if (usuariosFiltrados.length === 0) {
+        usuarios.value = usuarioAux.value;
     }
-    loader.hide();
 }
 
-function abrirChat(usuario: string) {
-    loader.show({
-        canCancel: false,
-        color: '#ffffff',
-        loader: 'spinner',
-        width: 64,
-        height: 64,
-        backgroundColor: '#000000',
-        opacity: 0.5,
-        zIndex: 999,
-    });
+function abrirChat(usuario: any) {
     // guardar el nombre del usuario con el que se está chateando
-    chateandoCon = usuario;
+    chateandoCon = usuario.username;
 
-    console.log(usuario);
+    //console.log(usuario);
     // Swal toast de "Chateando con"
     Toast.fire({
         icon: 'success',
-        title: 'Chateando con ' + usuario,
+        title: 'Chateando con ' + usuario.username,
     });
 
     //Obtener todos los mensajes de firestore
-    const conversacionID = generarConversacionID(nombre.value, usuario);
+    const conversacionID = generarConversacionID(nombre.value, usuario.username);
     const mensajesRef = collection(db, 'mensajes', conversacionID, 'mensajes');
 
     onSnapshot(mensajesRef, (snapshot) => {
@@ -345,7 +320,6 @@ function abrirChat(usuario: string) {
         });
         scrollHaciaUltimoMensaje();
     });
-    loader.hide();
 }
 
 function scrollHaciaUltimoMensaje() {
@@ -360,16 +334,6 @@ function scrollHaciaUltimoMensaje() {
 }
 
 function enviarMensaje(usuario1: any, usuario2: any, message: any) {
-    loader.show({
-        canCancel: false,
-        color: '#ffffff',
-        loader: 'spinner',
-        width: 64,
-        height: 64,
-        backgroundColor: '#000000',
-        opacity: 0.5,
-        zIndex: 999,
-    });
     if (chateandoCon === '') {
         // Swal toast de "Chateando con"
         Toast.fire({
@@ -401,10 +365,12 @@ function enviarMensaje(usuario1: any, usuario2: any, message: any) {
         });
         console.log('Mensaje enviado correctamente');
         mensaje.value = "";
+        // Obtener el text area y limpiarlo
+        const chat = document.getElementById('chat') as HTMLTextAreaElement;
+        chat.value = '';
     } catch (error) {
         console.error('Error al enviar el mensaje:', error);
     }
-    loader.hide();
 }
 
 function generarConversacionID(usuario1: any, usuario2: any) {
@@ -412,7 +378,6 @@ function generarConversacionID(usuario1: any, usuario2: any) {
 }
 </script>
 <template >
-    <loading></loading>
     <div class="bg-white">
         <nav class="fixed top-0 z-50 w-full bg-white border-b border-gray-200 dark:bg-gray-800 dark:border-gray-700">
             <div class="px-3 py-3 lg:px-5 lg:pl-3">
@@ -437,7 +402,21 @@ function generarConversacionID(usuario1: any, usuario2: any) {
                     </div>
                     <div class="flex items-center">
                         <div class="flex items-center ms-3">
-                            <div>
+                            <div class="flex w-full justify-center align-middle">
+                                <span v-if="JSON.stringify(usuarios) == '{}'" class="v-center">
+                                    <p class="px-1 text-center text-sm text-green-600">Cargando perfil</p>
+                                    <svg aria-hidden="true" class="px-1 w-8 h-8 text-gray-200 animate-spin fill-green-600"
+                                        viewBox="0 0 100 101" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path
+                                            d="M100 50.5908C100 78.2051 77.6142 100.591 50 100.591C22.3858 100.591 0 78.2051 0 50.5908C0 22.9766 22.3858 0.59082 50 0.59082C77.6142 0.59082 100 22.9766 100 50.5908ZM9.08144 50.5908C9.08144 73.1895 27.4013 91.5094 50 91.5094C72.5987 91.5094 90.9186 73.1895 90.9186 50.5908C90.9186 27.9921 72.5987 9.67226 50 9.67226C27.4013 9.67226 9.08144 27.9921 9.08144 50.5908Z"
+                                            fill="currentColor" />
+                                        <path
+                                            d="M93.9676 39.0409C96.393 38.4038 97.8624 35.9116 97.0079 33.5539C95.2932 28.8227 92.871 24.3692 89.8167 20.348C85.8452 15.1192 80.8826 10.7238 75.2124 7.41289C69.5422 4.10194 63.2754 1.94025 56.7698 1.05124C51.7666 0.367541 46.6976 0.446843 41.7345 1.27873C39.2613 1.69328 37.813 4.19778 38.4501 6.62326C39.0873 9.04874 41.5694 10.4717 44.0505 10.1071C47.8511 9.54855 51.7191 9.52689 55.5402 10.0491C60.8642 10.7766 65.9928 12.5457 70.6331 15.2552C75.2735 17.9648 79.3347 21.5619 82.5849 25.841C84.9175 28.9121 86.7997 32.2913 88.1811 35.8758C89.083 38.2158 91.5421 39.6781 93.9676 39.0409Z"
+                                            fill="currentFill" />
+                                    </svg>
+                                    <span class="sr-only">Loading...</span>
+
+                                </span>
                                 <button type="button"
                                     class="flex text-sm bg-gray-800 rounded-full focus:ring-4 focus:ring-gray-300 dark:focus:ring-gray-600"
                                     aria-expanded="false" data-dropdown-toggle="dropdown-user">
@@ -483,28 +462,45 @@ function generarConversacionID(usuario1: any, usuario2: any) {
             <div class="h-full px-3 pb-4 overflow-y-auto bg-white dark:bg-gray-800">
                 <ul class="space-y-2 font-medium">
                     <li>
-                        <form @submit.prevent="buscar">
+                        <form @submit.prevent="buscar" class="border-b pb-3">
+
                             <div class="relative">
-                                <input v-model="busqueda" type="search" id="busqueda"
-                                    class="block w-full p-4 ps-10 text-sm text-gray-900 border border-gray-300 rounded-lg bg-gray-50 focus:ring-green-500 focus:border-green-500 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-green-500 dark:focus:border-green-500"
-                                    placeholder="Buscar amigos">
-                                <button type="submit"
-                                    class="text-white absolute end-2.5 bottom-2.5 bg-green-700 hover:bg-green-800 focus:ring-4 focus:outline-none focus:ring-green-300 font-medium rounded-lg text-sm px-4 py-2 dark:bg-green-600 dark:hover:bg-green-700 dark:focus:ring-green-800">
-                                    <svg class="w-4 h-4 text-white dark:text-white" aria-hidden="true"
+                                <div class="absolute inset-y-0 start-0 flex items-center ps-3 pointer-events-none">
+                                    <svg class="w-4 h-4 text-green-500" aria-hidden="true"
                                         xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 20">
                                         <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"
                                             stroke-width="2" d="m19 19-4-4m0-7A7 7 0 1 1 1 8a7 7 0 0 1 14 0Z" />
                                     </svg>
-                                </button>
+                                </div>
+                                <input type="text" v-model="busqueda" @input="buscar" placeholder="Buscar usuario..."
+                                    class="block w-full p-4 pl-10 text-sm text-gray-900 border border-gray-300 rounded-lg bg-gray-50 focus:ring-green-500 focus:border-green-500 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-green-500 dark:focus:border-green-500">
                             </div>
                         </form>
                     </li>
-                    <li v-for="(usuario, index) in usuarios" :key="index">
-                        <a v-if="usuario !== nombre" :name="usuario" @click.prevent="abrirChat(usuario)" type="button"
-                            class="cursor-pointer flex items-center p-2 text-gray-900 rounded-lg dark:text-white
-                                                                                hover:bg-gray-100 dark:hover:bg-gray-700 group">
-                            <img class="w-8 h-8 rounded-full" src="@/assets/perfil.jpg" alt="user photo">
-                            <span class="flex-1 ms-3 whitespace-nowrap">{{ usuario }}</span>
+                    <li v-if="JSON.stringify(usuarios) == '{}'">
+                        <p class="text-center text-sm text-green-600">Cargando usuarios</p>
+                        <div class="mt-3 flex w-full justify-center align-middle">
+                            <svg aria-hidden="true" class="w-8 h-8 text-gray-200 animate-spin fill-green-600"
+                                viewBox="0 0 100 101" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path
+                                    d="M100 50.5908C100 78.2051 77.6142 100.591 50 100.591C22.3858 100.591 0 78.2051 0 50.5908C0 22.9766 22.3858 0.59082 50 0.59082C77.6142 0.59082 100 22.9766 100 50.5908ZM9.08144 50.5908C9.08144 73.1895 27.4013 91.5094 50 91.5094C72.5987 91.5094 90.9186 73.1895 90.9186 50.5908C90.9186 27.9921 72.5987 9.67226 50 9.67226C27.4013 9.67226 9.08144 27.9921 9.08144 50.5908Z"
+                                    fill="currentColor" />
+                                <path
+                                    d="M93.9676 39.0409C96.393 38.4038 97.8624 35.9116 97.0079 33.5539C95.2932 28.8227 92.871 24.3692 89.8167 20.348C85.8452 15.1192 80.8826 10.7238 75.2124 7.41289C69.5422 4.10194 63.2754 1.94025 56.7698 1.05124C51.7666 0.367541 46.6976 0.446843 41.7345 1.27873C39.2613 1.69328 37.813 4.19778 38.4501 6.62326C39.0873 9.04874 41.5694 10.4717 44.0505 10.1071C47.8511 9.54855 51.7191 9.52689 55.5402 10.0491C60.8642 10.7766 65.9928 12.5457 70.6331 15.2552C75.2735 17.9648 79.3347 21.5619 82.5849 25.841C84.9175 28.9121 86.7997 32.2913 88.1811 35.8758C89.083 38.2158 91.5421 39.6781 93.9676 39.0409Z"
+                                    fill="currentFill" />
+                            </svg>
+                            <span class="sr-only">Loading...</span>
+                        </div>
+                    </li>
+                    <li v-else v-for="(usuario) in JSON.parse(JSON.stringify(usuarios))">
+                        <a v-if="usuario.username != nombre" :name="usuario" @click.prevent="abrirChat(usuario)"
+                            type="button"
+                            class="cursor-pointer flex items-center p-2 text-gray-900 rounded-lg dark:text-white hover:bg-gray-100 dark:hover:bg-gray-700 group">
+                            <img v-if="usuario.base64Image === ''" class="w-8 h-8 rounded-full" src="@/assets/perfil.jpg"
+                                alt="default user photo">
+                            <img v-if="usuario.base64Image !== ''" class="w-8 h-8 rounded-full" :src="usuario.base64Image"
+                                alt="user photo">
+                            <span class="flex-1 ms-3 whitespace-nowrap">{{ usuario.username }}</span>
                         </a>
                     </li>
                 </ul>
@@ -513,8 +509,36 @@ function generarConversacionID(usuario1: any, usuario2: any) {
 
         <div class="contenedor-padre p-4 sm:ml-64">
             <div name="chatContainer"
-                class="border border-gray-300 border-b-0 div-arriba p-4 mt-14 bg-green-200 rounded-t-lg overflow-scroll">
-                <!--Aca se cargan los mensajes-->
+                class="border border-gray-300 border-b-0 div-arriba p-4 mt-14 bg-green-200 rounded-t-lg overflow-y-scroll">
+                <div v-if="chateandoCon === ''" class="v-center justify-center h-full w-full">
+                    <div class="block">
+                        <div class="justify-center align-middle mt-3 mb-3">
+                            <div class="flex justify-center">
+                                <img alt="Firebase logo" src="@/assets/logo-logomark.svg" width="60" height="60" />
+                            </div>
+                            <div class="flex justify-center">
+                                <img alt="Vue logo" src="@/assets/logo.svg" width="120" height="120" />
+                            </div>
+                        </div>
+                        <h1 class="text-center text-2xl font-bold text-green-600">Bienvenido a VueChat</h1>
+                        <p class="text-center text-lg text-green-600">Seleccione un usuario para comenzar a
+                            chatear</p>
+                        <span v-if="JSON.stringify(usuarios) == '{}'" class="v-center">
+                            <p class="px-1 text-center text-sm text-green-600">Cargando contenido</p>
+                            <svg aria-hidden="true" class="px-1 w-8 h-8 text-gray-200 animate-spin fill-green-600"
+                                viewBox="0 0 100 101" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path
+                                    d="M100 50.5908C100 78.2051 77.6142 100.591 50 100.591C22.3858 100.591 0 78.2051 0 50.5908C0 22.9766 22.3858 0.59082 50 0.59082C77.6142 0.59082 100 22.9766 100 50.5908ZM9.08144 50.5908C9.08144 73.1895 27.4013 91.5094 50 91.5094C72.5987 91.5094 90.9186 73.1895 90.9186 50.5908C90.9186 27.9921 72.5987 9.67226 50 9.67226C27.4013 9.67226 9.08144 27.9921 9.08144 50.5908Z"
+                                    fill="currentColor" />
+                                <path
+                                    d="M93.9676 39.0409C96.393 38.4038 97.8624 35.9116 97.0079 33.5539C95.2932 28.8227 92.871 24.3692 89.8167 20.348C85.8452 15.1192 80.8826 10.7238 75.2124 7.41289C69.5422 4.10194 63.2754 1.94025 56.7698 1.05124C51.7666 0.367541 46.6976 0.446843 41.7345 1.27873C39.2613 1.69328 37.813 4.19778 38.4501 6.62326C39.0873 9.04874 41.5694 10.4717 44.0505 10.1071C47.8511 9.54855 51.7191 9.52689 55.5402 10.0491C60.8642 10.7766 65.9928 12.5457 70.6331 15.2552C75.2735 17.9648 79.3347 21.5619 82.5849 25.841C84.9175 28.9121 86.7997 32.2913 88.1811 35.8758C89.083 38.2158 91.5421 39.6781 93.9676 39.0409Z"
+                                    fill="currentFill" />
+                            </svg>
+                            <span class="sr-only">Loading...</span>
+
+                        </span>
+                    </div>
+                </div>
             </div>
             <div class="div-abajo border border-gray-300 border-t-0 bg-green-200 overflow-hidden">
                 <form>
@@ -581,17 +605,16 @@ function generarConversacionID(usuario1: any, usuario2: any) {
                 <!-- Modal body -->
                 <form @submit.prevent="actualizarUsuario" class="max-w-sm mx-auto">
                     <div class="p-6 space-y-6">
-                        <div class="mb-5">
-                            <label for="nombre"
-                                class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Nombre</label>
-                            <input v-model="nombre" name="nombre" type="text" id="nombre"
-                                class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-green-500 focus:border-green-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-green-500 dark:focus:border-green-500"
-                                placeholder="Nombre" required>
-                        </div>
+                        <!--<div class="mb-5">
+                                                                                                            <label for="nombre"
+                                                                                                                class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Nombre</label>
+                                                                                                            <input v-model="nombre" name="nombre" type="text" id="nombre"
+                                                                                                                class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-green-500 focus:border-green-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-green-500 dark:focus:border-green-500"
+                                                                                                                placeholder="Nombre" required>
+                                                                                                        </div>-->
                         <div class="mb-5">
                             <label for="imagen" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Imagen
-                                de perfil
-                                (Opcional)</label>
+                                de perfil</label>
                             <input name="inputFile" type="file" id="imagen" @change.prevent="event => cargarImagen(event)"
                                 class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-green-500 focus:border-green-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-green-500 dark:focus:border-green-500">
                         </div>
@@ -651,5 +674,11 @@ function generarConversacionID(usuario1: any, usuario2: any) {
 
 .div-abajo {
     height: 59px;
+}
+
+.v-center {
+    display: flex;
+    justify-content: center;
+    align-items: center;
 }
 </style>
